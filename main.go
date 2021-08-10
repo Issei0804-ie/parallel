@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"sync"
 )
 
 type Item struct {
 	Value  uint64
 	Weight uint64
 }
+
+var answer Result
 
 /*
 6 65
@@ -79,7 +82,6 @@ func calcWeight(items []Item, bits uint64) (weight, value uint64) {
 
 type Result struct {
 	w, v, b uint64
-	isOver  bool
 }
 
 func parallelSolve(items []Item, weight uint64) (w, v, bits uint64) {
@@ -89,40 +91,59 @@ func parallelSolve(items []Item, weight uint64) (w, v, bits uint64) {
 	v = 0
 	bits = 0
 
-	r := make(chan Result, 10000000)
+	wg := sync.WaitGroup{}
+	mu := sync.Mutex{}
 
 	for j = 0; j < uint64(p); j++ {
-		go parallelCalcWeight(items, j, r)
+		wg.Add(1)
+		go parallelCalcWeight(items, j, weight, &wg, &mu)
 	}
-	for j = 0; j < uint64(p); j++ {
-		result := <-r
-		w2 := result.w
-		v2 := result.v
-		b2 := result.b
-		if w2 <= weight && w < w2 {
-			w = w2
-			v = v2
-			bits = b2
+	wg.Wait()
+
+	w = answer.w
+	v = answer.v
+	bits = answer.b
+	/*
+		for i = 0; i < uint64(p); i++ {
+			result := <-r
+			if result.isOver {
+				continue
+			}
+			w2 := result.w
+			v2 := result.v
+			b2 := result.b
+			if w2 <= weight && w < w2 {
+				w = w2
+				v = v2
+				bits = b2
+			}
 		}
-	}
+	*/
 	return
 }
 
-func parallelCalcWeight(items []Item, bits uint64, r chan Result) {
+func parallelCalcWeight(items []Item, bits, weights uint64, wg *sync.WaitGroup, mu *sync.Mutex) {
 	var weight, value uint64
 	weight = 0
 	value = 0
 	shiftBits := bits
-	result := Result{}
 	for i := 0; i < len(items); i++ {
 		if shiftBits&1 == 1 {
 			weight += items[i].Weight
 			value += items[i].Value
 		}
+		if weights < weight {
+			wg.Done()
+			return
+		}
 		shiftBits = shiftBits >> 1
 	}
-	result.w = weight
-	result.v = value
-	result.b = bits
-	r <- result
+	mu.Lock()
+	if answer.v < value {
+		answer.v = value
+		answer.w = weight
+		answer.b = bits
+	}
+	mu.Unlock()
+	wg.Done()
 }
