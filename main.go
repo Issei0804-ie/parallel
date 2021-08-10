@@ -89,12 +89,11 @@ func parallelSolve(items []Item, weight uint64) (w, v, bits uint64) {
 	v = 0
 	bits = 0
 
-	r := make(chan Result)
+	r := make(chan Result, 10000000)
 
 	for j = 0; j < uint64(p); j++ {
 		go parallelCalcWeight(items, j, r)
 	}
-
 	for j = 0; j < uint64(p); j++ {
 		result := <-r
 		w2 := result.w
@@ -125,6 +124,5 @@ func parallelCalcWeight(items []Item, bits uint64, r chan Result) {
 	result.w = weight
 	result.v = value
 	result.b = bits
-
 	r <- result
 }
